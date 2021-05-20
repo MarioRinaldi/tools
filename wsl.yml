@@ -1,0 +1,127 @@
+---
+- name: Preparing Workstation
+  hosts: localhost
+  connection: local
+  tasks:
+    - block:
+      - name: Install Github CLI key
+        become: true
+        apt_key:
+          url: https://cli.github.com/packages/githubcli-archive-keyring.gpg
+          keyring: /usr/share/keyrings/githubcli-archive-keyring.gpg
+          state: present
+      - name: Install Github CLI Repository
+        become: true
+        apt_repository:
+          repo: 'deb [arch=amd64] https://cli.github.com/packages stable main'
+          state: present
+          filename: github-cli
+
+    - block:
+      - name: Install Google Key
+        become: true
+        apt_key:
+          url: 'https://dl.google.com/linux/linux_signing_key.pub'
+          state: present
+      - name: Install Google Repository
+        become: true
+        apt_repository:
+          repo: 'deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main'
+          state: present
+          filename: google-chrome
+
+    - name: Installing Linux Apps
+      become: true
+      apt:
+        name: '{{ item }}'
+        install_recommends: yes
+        state: present
+        update_cache: true
+      loop:
+          - vim
+          - fontconfig
+          - ca-certificates
+          - gnupg
+          - python3-pip
+          - bash-completion
+          - zsh
+
+    - block:
+      - name: Install PowerlineSymbols
+        shell:
+          cmd: 'mkdir -p  ~/.local/share/fonts/'
+          cmd: 'mkdir -p ~/.config/fontconfig/conf.d/'
+          cmd: 'wget -O ~/.local/share/fonts/PowerlineSymbols.otf https://github.com/powerline/powerline/raw/develop/font/PowerlineSymbols.otf'
+          cmd: 'wget -O ~/.local/share/fonts/10-powerline-symbols.conf https://github.com/powerline/powerline/raw/develop/font/10-powerline-symbols.conf'
+          # cmd: 'mv PowerlineSymbols.otf ~/.local/share/fonts/'
+          cmd: 'fc-cache -vf ~/.local/share/fonts/'
+          # cmd: 'mv 10-powerline-symbols.conf ~/.config/fontconfig/conf.d/'
+
+    - block:
+      - name: Verify if Oh-My-zsh is installed
+        command: test -d /home/{{ ansible_user_id }}/.oh-my-zsh
+        register: ohmyzsh
+        ignore_errors: true
+      - name: Installing Oh-My-zsh
+        shell:
+          cmd: 'curl -fsL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh | bash'
+          warn: false
+        when: ohmyzsh.rc != 0
+      - name: Installing Oh-My-zsh theme
+        shell:
+          cmd: 'git clone https://github.com/bhilburn/powerlevel9k.git ~/.oh-my-zsh/custom/themes/powerlevel9k'
+          warn: false
+        when: ohmyzsh.rc != 0
+      - name: Changing Default Shell to ZSH
+        become: yes
+        user:
+          name: '{{ ansible_user_id }}'
+          shell: /bin/zsh
+      - name: Changing Default ZSH Theme to Powerlevel9k
+        lineinfile:
+          path: /home/{{ ansible_user_id }}/.zshrc
+          regexp: '^ZSH_THEME='
+          line: 'ZSH_THEME="Powerlevel9k"'
+      - name: Configure ZSH Powerlevel9k
+        blockinfile:
+          path: /home/{{ ansible_user_id }}/.zshrc
+          insertafter: 'ZSH_THEME="Powerlevel9k"'
+          block: |
+            POWERLEVEL9K_MODE="nerdfont-complete"
+            POWERLEVEL9K_LEFT_PROMPT_ELEMENTS=(context dir dir_writable vcs vi_mode)
+            POWERLEVEL9K_RIGHT_PROMPT_ELEMENTS=(status)
+            POWERLEVEL9K_PROMPT_ON_NEWLINE=true
+      - name: Creating ZSH Completion folder
+        file:
+          path: /home/{{ ansible_user_id }}/.oh-my-zsh/completions
+          state: directory
+          mode: 0755
+      - name: Install zsh-completion
+        shell:
+          cmd: '  git clone https://github.com/zsh-users/zsh-completions ${ZSH_CUSTOM:=~/.oh-my-zsh/custom}/plugins/zsh-completions'
+      - name: Configure zsh-completion
+        lineinfile:
+          path: /home/{{ ansible_user_id }}/.zshrc
+          regexp: '^plugins=(git)'
+          line: 'plugins=(git zsh-completions)'
+      - name: Adding autoload to compinit
+        lineinfile:
+          path: /home/{{ ansible_user_id }}/.zshrc
+          line: 'autoload -U compinit && compinit'
+          state: present
+
+    - name: Installing AWS CLI via pip3
+      become: true
+      pip:
+        name: awscli
+        executable: pip3
+
+    - name: Install Google Chrome
+      become: true
+      apt:
+        name: google-chrome-stable
+
+    - name: Install Github CLI
+      become: true
+      apt:
+        name: gh
